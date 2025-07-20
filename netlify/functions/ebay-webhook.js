@@ -1,63 +1,97 @@
-export default function handler(req, res) {
+// netlify/functions/ebay-webhook.js
+exports.handler = async (event, context) => {
   // Log for debugging
-  console.log('=== eBay Webhook Received ===');
-  console.log('Method:', req.method);
-  console.log('Body:', JSON.stringify(req.body, null, 2));
-  
+  console.log('=== Netlify eBay Webhook ===');
+  console.log('Method:', event.httpMethod);
+  console.log('Body:', event.body);
+  console.log('Headers:', JSON.stringify(event.headers, null, 2));
+
   // Only allow POST requests
-  if (req.method !== 'POST') {
-    return res.status(405).json({ 
-      error: 'Method not allowed',
-      message: 'This endpoint only accepts POST requests'
-    });
+  if (event.httpMethod !== 'POST') {
+    return {
+      statusCode: 405,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        error: 'Method not allowed',
+        message: 'This endpoint only accepts POST requests'
+      })
+    };
   }
 
   try {
-    // Your verification token - use whatever you have in eBay form
-    const VERIFICATION_TOKEN = 'chaimae_ebay_webhook_2025_production_token_secure';
+    // Your verification token
+    const VERIFICATION_TOKEN = 'chaimae_netlify_ebay_webhook_2025_production_secure';
     
-    // Get the verification token from request body
-    const requestToken = req.body?.verificationToken || req.body?.verification_token;
+    // Parse the request body
+    const requestBody = JSON.parse(event.body || '{}');
+    const { verificationToken, username, userId, timestamp } = requestBody;
     
-    console.log('Token comparison:');
+    console.log('Token verification:');
     console.log('Expected:', VERIFICATION_TOKEN);
-    console.log('Received:', requestToken);
+    console.log('Received:', verificationToken);
     
     // Verify the token
-    if (requestToken !== VERIFICATION_TOKEN) {
-      console.log('❌ Token verification FAILED');
-      return res.status(401).json({ 
-        error: 'Unauthorized',
-        message: 'Invalid verification token'
-      });
+    if (verificationToken !== VERIFICATION_TOKEN) {
+      console.log('❌ Token verification failed');
+      return {
+        statusCode: 401,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          error: 'Unauthorized',
+          message: 'Invalid verification token'
+        })
+      };
     }
 
-    console.log('✅ Token verification SUCCESS');
+    console.log('✅ Token verification successful');
     
-    // Process the account deletion request
-    const { username, userId, timestamp } = req.body;
-    
-    console.log('Processing account deletion:', {
+    // Log the account deletion request
+    console.log('Processing eBay account deletion:', {
       username,
       userId,
-      timestamp
-    });
-
-    // TODO: Add your actual user deletion logic here
-    
-    // Return success
-    return res.status(200).json({ 
-      status: 'success', 
-      message: 'Account deletion request processed successfully',
-      userId: userId,
+      timestamp,
       processedAt: new Date().toISOString()
     });
 
+    // TODO: Add your actual user deletion logic here
+    // Examples:
+    // - Remove user data from database
+    // - Anonymize user information
+    // - Update user status to "deleted"
+    // - Send confirmation email
+
+    // Return success response
+    return {
+      statusCode: 200,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        status: 'success',
+        message: 'eBay account deletion request processed successfully',
+        userId: userId,
+        service: 'tcgcardchaimae-netlify',
+        processedAt: new Date().toISOString()
+      })
+    };
+
   } catch (error) {
-    console.error('❌ Webhook error:', error);
-    return res.status(500).json({ 
-      error: 'Internal server error',
-      message: error.message
-    });
+    console.error('❌ Webhook processing error:', error);
+    
+    return {
+      statusCode: 500,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        error: 'Internal server error',
+        message: error.message,
+        timestamp: new Date().toISOString()
+      })
+    };
   }
-}
+};
