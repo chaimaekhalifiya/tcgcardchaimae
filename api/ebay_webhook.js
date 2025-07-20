@@ -11,7 +11,7 @@ export default function handler(req, res) {
 
   try {
     // Your verification token for tcgcardchaimae (32-80 characters required)
-    const VERIFICATION_TOKEN = 'tcgcardchaimae_ebay_production_webhook_2025_secure_token_z8k5m3n9q2w6e4r7x1y9';
+    const VERIFICATION_TOKEN = 'tcgcardchaimae_ebay_production_webhook_2025_secure_token_xyz123';
     
     // Get the request body
     const { verificationToken, username, userId, timestamp } = req.body;
