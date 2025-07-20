@@ -1,57 +1,52 @@
-// api/ebay-webhook.js - Production eBay Webhook
 export default function handler(req, res) {
-  // Only allow POST requests for eBay webhooks
+  // Log for debugging
+  console.log('=== eBay Webhook Received ===');
+  console.log('Method:', req.method);
+  console.log('Body:', JSON.stringify(req.body, null, 2));
+  
+  // Only allow POST requests
   if (req.method !== 'POST') {
     return res.status(405).json({ 
       error: 'Method not allowed',
-      message: 'This endpoint only accepts POST requests for eBay webhooks'
+      message: 'This endpoint only accepts POST requests'
     });
   }
 
   try {
-    // Your verification token (32+ characters as required by eBay)
-    const VERIFICATION_TOKEN = 'tcgcardchaimae_ebay_webhook_production_2025_secure_token';
+    // Your verification token - use whatever you have in eBay form
+    const VERIFICATION_TOKEN = 'chaimae_ebay_webhook_2025_production_token_secure';
     
-    // Log the incoming request for debugging
-    console.log('eBay webhook received:', {
-      method: req.method,
-      headers: req.headers,
-      body: req.body,
-      timestamp: new Date().toISOString()
-    });
+    // Get the verification token from request body
+    const requestToken = req.body?.verificationToken || req.body?.verification_token;
     
-    // Get verification token from request
-    const { verificationToken, username, userId, timestamp } = req.body;
+    console.log('Token comparison:');
+    console.log('Expected:', VERIFICATION_TOKEN);
+    console.log('Received:', requestToken);
     
-    // Verify the token matches
-    if (verificationToken !== VERIFICATION_TOKEN) {
-      console.log('Token verification failed:', {
-        received: verificationToken,
-        expected: VERIFICATION_TOKEN
-      });
+    // Verify the token
+    if (requestToken !== VERIFICATION_TOKEN) {
+      console.log('❌ Token verification FAILED');
       return res.status(401).json({ 
         error: 'Unauthorized',
         message: 'Invalid verification token'
       });
     }
 
-    // Log successful account deletion request
-    console.log('eBay account deletion request processed:', {
+    console.log('✅ Token verification SUCCESS');
+    
+    // Process the account deletion request
+    const { username, userId, timestamp } = req.body;
+    
+    console.log('Processing account deletion:', {
       username,
       userId,
-      timestamp,
-      processedAt: new Date().toISOString()
+      timestamp
     });
 
     // TODO: Add your actual user deletion logic here
-    // Examples:
-    // - Remove user data from database
-    // - Anonymize user information
-    // - Update user status to "deleted"
-    // - Send confirmation email
     
-    // Return success response
-    res.status(200).json({ 
+    // Return success
+    return res.status(200).json({ 
       status: 'success', 
       message: 'Account deletion request processed successfully',
       userId: userId,
@@ -59,12 +54,10 @@ export default function handler(req, res) {
     });
 
   } catch (error) {
-    console.error('Error processing eBay webhook:', error);
-    
-    res.status(500).json({ 
+    console.error('❌ Webhook error:', error);
+    return res.status(500).json({ 
       error: 'Internal server error',
-      message: error.message,
-      timestamp: new Date().toISOString()
+      message: error.message
     });
   }
 }
