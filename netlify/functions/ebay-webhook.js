@@ -1,97 +1,148 @@
 // netlify/functions/ebay-webhook.js
+const crypto = require('crypto');
+
 exports.handler = async (event, context) => {
-  // Log for debugging
-  console.log('=== Netlify eBay Webhook ===');
+  console.log('=== eBay Webhook Called ===');
   console.log('Method:', event.httpMethod);
-  console.log('Body:', event.body);
+  console.log('Query params:', event.queryStringParameters);
   console.log('Headers:', JSON.stringify(event.headers, null, 2));
+  console.log('Body:', event.body);
 
-  // Only allow POST requests
-  if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        error: 'Method not allowed',
-        message: 'This endpoint only accepts POST requests'
-      })
-    };
-  }
+  // Your configuration
+  const VERIFICATION_TOKEN = 'chaimae_netlify_ebay_webhook_2025_production_secure';
+  const ENDPOINT_URL = 'https://boisterous-dasik-eca994.netlify.app/.netlify/functions/ebay-webhook';
 
-  try {
-    // Your verification token
-    const VERIFICATION_TOKEN = 'chaimae_netlify_ebay_webhook_2025_production_secure';
+  // Handle GET request with challenge code (eBay validation)
+  if (event.httpMethod === 'GET') {
+    const challengeCode = event.queryStringParameters?.challenge_code;
     
-    // Parse the request body
-    const requestBody = JSON.parse(event.body || '{}');
-    const { verificationToken, username, userId, timestamp } = requestBody;
-    
-    console.log('Token verification:');
-    console.log('Expected:', VERIFICATION_TOKEN);
-    console.log('Received:', verificationToken);
-    
-    // Verify the token
-    if (verificationToken !== VERIFICATION_TOKEN) {
-      console.log('❌ Token verification failed');
+    if (!challengeCode) {
+      console.log('❌ No challenge code provided in GET request');
       return {
-        statusCode: 401,
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        statusCode: 400,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          error: 'Unauthorized',
-          message: 'Invalid verification token'
+          error: 'Missing challenge_code parameter'
         })
       };
     }
 
-    console.log('✅ Token verification successful');
+    console.log('✅ Challenge code received:', challengeCode);
     
-    // Log the account deletion request
-    console.log('Processing eBay account deletion:', {
-      username,
-      userId,
-      timestamp,
-      processedAt: new Date().toISOString()
-    });
-
-    // TODO: Add your actual user deletion logic here
-    // Examples:
-    // - Remove user data from database
-    // - Anonymize user information
-    // - Update user status to "deleted"
-    // - Send confirmation email
-
-    // Return success response
+    // Create hash as per eBay docs: challengeCode + verificationToken + endpoint
+    const hash = crypto.createHash('sha256');
+    hash.update(challengeCode);
+    hash.update(VERIFICATION_TOKEN);
+    hash.update(ENDPOINT_URL);
+    const challengeResponse = hash.digest('hex');
+    
+    console.log('Challenge response hash:', challengeResponse);
+    
+    // Return the required response format
     return {
       statusCode: 200,
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        status: 'success',
-        message: 'eBay account deletion request processed successfully',
-        userId: userId,
-        service: 'tcgcardchaimae-netlify',
-        processedAt: new Date().toISOString()
-      })
-    };
-
-  } catch (error) {
-    console.error('❌ Webhook processing error:', error);
-    
-    return {
-      statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        error: 'Internal server error',
-        message: error.message,
-        timestamp: new Date().toISOString()
+        challengeResponse: challengeResponse
       })
     };
   }
+
+  // Handle POST request (actual notifications)
+  if (event.httpMethod === 'POST') {
+    try {
+      console.log('📨 Processing POST notification');
+      
+      // Parse the notification body
+      const notification = JSON.parse(event.body || '{}');
+      
+      console.log('Notification received:', {
+        topic: notification.metadata?.topic,
+        notificationId: notification.notification?.notificationId,
+        eventDate: notification.notification?.eventDate,
+        username: notification.notification?.data?.username,
+        userId: notification.notification?.data?.userId
+      });
+
+      // Validate it's a marketplace account deletion notification
+      if (notification.metadata?.topic !== 'MARKETPLACE_ACCOUNT_DELETION') {
+        console.log('❌ Invalid notification topic:', notification.metadata?.topic);
+        return {
+          statusCode: 400,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            error: 'Invalid notification topic'
+          })
+        };
+      }
+
+      // Extract user data
+      const userData = notification.notification?.data;
+      if (!userData) {
+        console.log('❌ No user data in notification');
+        return {
+          statusCode: 400,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            error: 'Missing user data'
+          })
+        };
+      }
+
+      console.log('✅ Processing account deletion for:', {
+        username: userData.username,
+        userId: userData.userId,
+        eiasToken: userData.eiasToken
+      });
+
+      // TODO: Implement your actual user deletion logic here
+      // Examples:
+      // - Remove user data from your database
+      // - Anonymize user information
+      // - Update user status to "deleted"
+      // - Log the deletion for compliance
+
+      // Return success response (required by eBay)
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          status: 'success',
+          message: 'Account deletion notification processed',
+          notificationId: notification.notification?.notificationId,
+          processedAt: new Date().toISOString()
+        })
+      };
+
+    } catch (error) {
+      console.error('❌ Error processing notification:', error);
+      
+      return {
+        statusCode: 500,
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          error: 'Internal server error',
+          message: error.message
+        })
+      };
+    }
+  }
+
+  // Method not allowed for other HTTP methods
+  return {
+    statusCode: 405,
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      error: 'Method not allowed',
+      message: 'Only GET and POST methods are supported'
+    })
+  };
 };
